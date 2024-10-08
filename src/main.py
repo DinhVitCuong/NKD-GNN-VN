@@ -7,6 +7,6 @@ from PIL import Image
 import numpy as np
 
 from preprocess_image import resize_image
-from model import ImageCaptioningModel
+from model import image_captioning_model
 from knowledge_graph import build_knowledge_graph
 from template_caption import generate_template_caption

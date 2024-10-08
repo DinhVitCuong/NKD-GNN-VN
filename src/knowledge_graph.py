@@ -2,12 +2,35 @@ from vncorenlp import VnCoreNLP
 import networkx as nx
 import matplotlib.pyplot as plt
 from collections import defaultdict
+import py_vncorenlp
 
-building_keywords = ["nhà", "tòa nhà", "cao ốc", "trụ sở", "công trình", "trung tâm", "khu chung cư", "biệt thự", "nhà máy", "nhà xưởng", "nhà kho", "bệnh viện", "trường học", "đại học", "khách sạn", "siêu thị", "chung cư", "nhà thờ", "chùa", "thánh đường", "nhà ga", "sân bay", "trung tâm thương mại", "nhà hát", "bảo tàng", "khu hành chính", "nhà hàng", "văn phòng", "khu nghỉ dưỡng", "ký túc xá", "bưu điện", "phòng khám", "thư viện", "sân vận động", "tòa thị chính", "trạm cứu hỏa", "cục cảnh sát", "trạm xăng", "công viên", "nhà nghỉ", "nhà thi đấu", "khu công nghiệp"]
+# Automatically download VnCoreNLP components from the original repository
+py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
-# Initialize VnCoreNLP: Set the correct path to the VnCoreNLP models jar file
-VNLPCORENLP_PATH = r'E:\DATN\NKD-GNN-test\VnCoreNLP\VnCoreNLP-1.2.jar'  # Replace with your correct path
-rdrsegmenter = VnCoreNLP(VNLPCORENLP_PATH, annotators="wseg,pos,ner", max_heap_size='-Xmx2g')
+# Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
+model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
+
+# Define placeholder tags
+PERSON_PLACEHOLDER = "<Person>"
+PLACE_PLACEHOLDER = "<Place>"
+ORGANIZATION_PLACEHOLDER = "<Organization>"
+BUILDING_PLACEHOLDER = "<Building>"
+
+# Define a list of common building-related words in Vietnamese
+building_keywords = [
+    "nhà", "tòa nhà", "cao ốc", "trụ sở", "công trình", "trung tâm", "khu chung cư", "biệt thự",
+    "nhà máy", "nhà xưởng", "nhà kho", "bệnh viện", "trường học", "đại học", "khách sạn", "siêu thị",
+    "chung cư", "nhà thờ", "chùa", "thánh đường", "nhà ga", "sân bay", "trung tâm thương mại", "nhà hát",
+    "bảo tàng", "khu hành chính", "nhà hàng", "văn phòng", "khu nghỉ dưỡng", "ký túc xá", "bưu điện",
+    "phòng khám", "thư viện", "sân vận động", "tòa thị chính", "trạm cứu hỏa", "cục cảnh sát", "trạm xăng",
+    "công viên", "nhà nghỉ", "nhà thi đấu", "khu công nghiệp"
+]
+
+# Function to detect and replace building-related words
+def get_building_placeholder(word):
+    if word.lower() in building_keywords:
+        return BUILDING_PLACEHOLDER
+    return word
 
 # Function to extract named entities from text
 def build_knowledge_graph(text):
@@ -17,14 +40,15 @@ def build_knowledge_graph(text):
     """
     
     # Step 1: Entity Extraction (Named Entity Recognition + Building Detection)
-    annotations = rdrsegmenter.annotate(text)
+    annotations = model.annotate_text(text)
     entities = []
     sentence_entities = []  # Store entities found in each sentence for co-occurrence
-
-    for sentence in annotations['sentences']:
-        sentence_entity_set = set()  # Collect entities in this sentence
+    for sentence_key in annotations:
+        sentence = annotations[sentence_key]
+        sentence_entity_set = set()
+        # Process each token in the sentence
         for token in sentence:
-            word = token['form']
+            word = token['wordForm']
             ner_tag = token['nerLabel']
 
             # If word is a recognized named entity by VnCoreNLP

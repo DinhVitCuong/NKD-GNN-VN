@@ -45,9 +45,9 @@ class LSTMDecoder(nn.Module):
         return outputs
     
 # Full model combining CNN encoder and LSTM decoder
-class ImageCaptioningModel(nn.Module):
+class image_captioning_model(nn.Module):
     def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
-        super(ImageCaptioningModel, self).__init__()
+        super().__init__()
         self.encoder = VGG19Encoder(embed_size)
         self.decoder = LSTMDecoder(embed_size, hidden_size, vocab_size, num_layers)
 
