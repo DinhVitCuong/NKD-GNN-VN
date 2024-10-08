@@ -6,13 +6,13 @@ import torchvision.models as models
 
 from preprocess_image import resize_image
 
-# CNN Encoder with Pre-trained ResNet-152
+# CNN Encoder with Pre-trained
 class VGG19Encoder(nn.Module):
     def __init__(self, embed_size):
         super(VGG19Encoder, self).__init__()
-        # Load pre-trained ResNet-152 model
+        # Load pre-trained
         vgg = models.vgg19(pretrained=True)
-        # Remove the last fully connected layer (fc) of ResNet-152
+        # Remove the last fully connected layer (fc) of 
         self.vgg = nn.Sequential(*list(vgg.children())[:-1])
         # Linear layer to map ResNet output to embedding size
         self.fc = nn.Linear(vgg.fc.in_features, embed_size)
@@ -20,7 +20,7 @@ class VGG19Encoder(nn.Module):
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, images):
-        # Extract features using ResNet-152 backbone
+        # Extract features using 
         with torch.no_grad():  # Disable gradient computation for ResNet
             features = self.vgg(images)
         # Flatten the features and pass through a linear layer

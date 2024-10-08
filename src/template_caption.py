@@ -13,7 +13,7 @@ ORGANIZATION_PLACEHOLDER = "<Organization>"
 BUILDING_PLACEHOLDER = "<Building>"
 
 # Define a list of common building-related words in Vietnamese
-building_keywords = ['nhà', 'tòa nhà', 'trường học', 'bệnh viện', 'khách sạn', 'sân bay', 'siêu thị', 'bảo tàng', 'trụ sở', 'chung cư']
+building_keywords = ["nhà", "tòa nhà", "cao ốc", "trụ sở", "công trình", "trung tâm", "khu chung cư", "biệt thự", "nhà máy", "nhà xưởng", "nhà kho", "bệnh viện", "trường học", "đại học", "khách sạn", "siêu thị", "chung cư", "nhà thờ", "chùa", "thánh đường", "nhà ga", "sân bay", "trung tâm thương mại", "nhà hát", "bảo tàng", "khu hành chính", "nhà hàng", "văn phòng", "khu nghỉ dưỡng", "ký túc xá", "bưu điện", "phòng khám", "thư viện", "sân vận động", "tòa thị chính", "trạm cứu hỏa", "cục cảnh sát", "trạm xăng", "công viên", "nhà nghỉ", "nhà thi đấu", "khu công nghiệp"]
 
 # Function to detect and replace building-related words
 def get_building_placeholder(word):
@@ -22,7 +22,7 @@ def get_building_placeholder(word):
     return word
 
 # Function to generate template captions with placeholders
-def generate_template_caption_vietnamese_with_buildings(text):
+def generate_template_caption(text):
     # Annotate the text with VnCoreNLP to get named entities and POS tags
     annotations = rdrsegmenter.annotate(text)
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     vietnamese_sentence = "Nguyễn Phú Trọng đã phát biểu tại tòa nhà Quốc hội và trường Đại học Quốc gia Hà Nội."
 
     # Generate template caption with placeholders
-    template_caption = generate_template_caption_vietnamese_with_buildings(vietnamese_sentence)
+    template_caption = generate_template_caption(vietnamese_sentence)
 
     print("Original Sentence: ", vietnamese_sentence)
     print("Template Caption: ", template_caption)
