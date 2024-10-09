@@ -14,12 +14,12 @@ BUILDING_PLACEHOLDER = "<Building>"
 
 # Define a list of common building-related words in Vietnamese
 building_keywords = [
-    "nhà", "tòa nhà", "cao ốc", "trụ sở", "công trình", "trung tâm", "khu chung cư", "biệt thự",
-    "nhà máy", "nhà xưởng", "nhà kho", "bệnh viện", "trường học", "đại học", "khách sạn", "siêu thị",
-    "chung cư", "nhà thờ", "chùa", "thánh đường", "nhà ga", "sân bay", "trung tâm thương mại", "nhà hát",
-    "bảo tàng", "khu hành chính", "nhà hàng", "văn phòng", "khu nghỉ dưỡng", "ký túc xá", "bưu điện",
-    "phòng khám", "thư viện", "sân vận động", "tòa thị chính", "trạm cứu hỏa", "cục cảnh sát", "trạm xăng",
-    "công viên", "nhà nghỉ", "nhà thi đấu", "khu công nghiệp"
+    "nhà", "tòa_nhà", "cao_ốc", "trụ_sở", "công_trình", "trung_tâm", "khu_chung_cư", "biệt_thự",
+    "nhà_máy", "nhà_xưởng", "nhà_kho", "bệnh_viện", "trường_học", "đại_học", "khách_sạn", "siêu_thị",
+    "chung_cư", "nhà_thờ", "chùa", "thánh_đường", "nhà_ga", "sân_bay", "trung tâm thương mại", "nhà_hát",
+    "bảo_tàng", "khu_hành_chính", "nhà_hàng", "văn_phòng", "khu_nghỉ_dưỡng", "ký_túc_xá", "bưu_điện",
+    "phòng_khám", "thư_viện", "sân_vận_động", "tòa_thị_chính", "trạm_cứu_hỏa", "cục_cảnh_sát", "trạm_xăng",
+    "công_viên", "nhà_nghỉ", "nhà_thi_đấu", "khu_công_nghiệp"
 ]
 
 # Function to detect and replace building-related words
@@ -88,7 +88,7 @@ def generate_template_caption(text):
 # Example usage
 if __name__ == "__main__":
     # Sample Vietnamese text containing named entities and building-related words
-    vietnamese_sentence = "Đinh Việt Cường đã phát biểu tại tòa nhà Quốc hội."
+    vietnamese_sentence = "Anh ấy đã phát biểu tại tòa nhà Quốc hội và ký túc xá."
 
     # Generate template caption with placeholders
     template_caption = generate_template_caption(vietnamese_sentence)
