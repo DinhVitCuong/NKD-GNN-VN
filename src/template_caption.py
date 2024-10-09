@@ -1,94 +1,65 @@
 import py_vncorenlp
-
+from word_lists import PEOPLE, PLACE, ORGANIZATION
 # Automatically download VnCoreNLP components from the original repository
-py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
+py_vncorenlp.download_model(save_dir=r'E:\DATN\NKD-GNN-test\VnCoreNLP')
 
 # Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
-model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
+model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'E:\DATN\NKD-GNN-test\VnCoreNLP')
 
 # Define placeholder tags
-PERSON_PLACEHOLDER = "<Person>"
-PLACE_PLACEHOLDER = "<Place>"
-ORGANIZATION_PLACEHOLDER = "<Organization>"
-BUILDING_PLACEHOLDER = "<Building>"
+PERSON_PLACEHOLDER = "<PERSON>"
+PLACE_PLACEHOLDER = "<PLACE>"
+ORGANIZATION_PLACEHOLDER = "<ORGANIZATION>"
 
-# Define a list of common building-related words in Vietnamese
-building_keywords = [
-    "nhà", "tòa_nhà", "cao_ốc", "trụ_sở", "công_trình", "trung_tâm", "khu_chung_cư", "biệt_thự",
-    "nhà_máy", "nhà_xưởng", "nhà_kho", "bệnh_viện", "trường_học", "đại_học", "khách_sạn", "siêu_thị",
-    "chung_cư", "nhà_thờ", "chùa", "thánh_đường", "nhà_ga", "sân_bay", "trung tâm thương mại", "nhà_hát",
-    "bảo_tàng", "khu_hành_chính", "nhà_hàng", "văn_phòng", "khu_nghỉ_dưỡng", "ký_túc_xá", "bưu_điện",
-    "phòng_khám", "thư_viện", "sân_vận_động", "tòa_thị_chính", "trạm_cứu_hỏa", "cục_cảnh_sát", "trạm_xăng",
-    "công_viên", "nhà_nghỉ", "nhà_thi_đấu", "khu_công_nghiệp"
-]
+# # Define a list of common words in Vietnamese
 
-# Function to detect and replace building-related words
-def get_building_placeholder(word):
-    if word.lower() in building_keywords:
-        return BUILDING_PLACEHOLDER
-    return word
 
 # Function to generate template captions with placeholders
 def generate_template_caption(text):
-    # Annotate the text with VnCoreNLP to get named entities (with wseg and ner)
-    annotations = model.annotate_text(text)
 
-    # Initialize a list to store the processed tokens
-    result = []
+    # Split into sentences
+    sentences = text.split(".")
 
-    # Variables to handle multi-token entities
-    current_entity = None
-    current_placeholder = None
+    # Annotate the chunk with VnCoreNLP
+    caption = []
+    for splited_sentence in sentences:
+        annotations = model.annotate_text(splited_sentence)
 
-    # Loop over each sentence in the annotation result (annotations is a dictionary with indices as keys)
-    for sentence_key in annotations:
-        sentence = annotations[sentence_key]
-        
-        # Process each token in the sentence
-        for token in sentence:
-            word = token['wordForm']
-            ner_tag = token['nerLabel']  # Get NER label from the token
+        # Initialize a list to store the processed tokens
+        result = []
 
-            # Check for beginning of a new entity
-            if ner_tag.startswith('B-'):
-                # If there was a previous entity, append its placeholder
-                if current_entity:
-                    result.append(current_placeholder)
-                # Set new entity
-                current_entity = ner_tag[2:]  # Get the entity type (e.g., PER, LOC, ORG)
-                if current_entity == 'PER':
-                    current_placeholder = PERSON_PLACEHOLDER
-                elif current_entity == 'LOC':
-                    current_placeholder = PLACE_PLACEHOLDER
-                elif current_entity == 'ORG':
-                    current_placeholder = ORGANIZATION_PLACEHOLDER
+        # Variables to handle multi-token entities
+        current_entity = None
+        current_placeholder = None
+
+        # Loop over each sentence in the annotation result (annotations is a dictionary with indices as keys)
+        for sentence_key in annotations:
+            sentence = annotations[sentence_key]
+            
+            # Process each token in the sentence
+            for token in sentence:
+                word = token['wordForm']
+                pos_tag = token['posTag']
+                if pos_tag == 'N':
+                    if word in PLACE:
+                        result.append(PLACE_PLACEHOLDER)
+                    elif word in PEOPLE:
+                        result.append(PERSON_PLACEHOLDER)
+                    elif word in ORGANIZATION:
+                        result.append(ORGANIZATION_PLACEHOLDER)
+                    else:
+                        result.append(word)
                 else:
-                    current_placeholder = get_building_placeholder(word)  # Handle building-related words
-            elif ner_tag.startswith('I-'):
-                # Continue the current entity, do nothing (placeholder already set)
-                continue
-            else:
-                # If we're done with an entity, append the placeholder and reset
-                if current_entity:
-                    result.append(current_placeholder)
-                    current_entity = None
-                    current_placeholder = None
-                # If not an entity, append the word (could be normal words or punctuation)
-                result.append(get_building_placeholder(word))
-
-        # If the sentence ends and we still have an active entity, append the placeholder
-        if current_entity:
-            result.append(current_placeholder)
-            current_entity = None
-            current_placeholder = None
-
+                    result.append(word)
+        caption = caption.append(' '.join(result))
     # Join the processed tokens back into a sentence
-    return ' '.join(result)
+    return ' '.join(caption)
+
 
 # Example usage
 if __name__ == "__main__":
     # Sample Vietnamese text containing named entities and building-related words
-    vietnamese_sentence = "Anh ấy đã phát biểu tại tòa nhà Quốc hội và ký túc xá."
+    vietnamese_sentence = "Anh ấy đã phát biểu tại tòa nhà Quốc hội. Hai người đàn ông đang đấm nhau ở quảng trường"
 
     # Generate template caption with placeholders
     template_caption = generate_template_caption(vietnamese_sentence)

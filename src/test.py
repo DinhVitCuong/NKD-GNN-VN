@@ -1,12 +1,2 @@
-import py_vncorenlp
-
-# Automatically download VnCoreNLP components from the original repository
-# and save them in some local working folder
-py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
-
-# Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models` 
-model = py_vncorenlp.VnCoreNLP(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
-# Equivalent to: model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner", "parse"], save_dir='/absolute/path/to/vncorenlp')
-
-# Annotate a raw text
-model.print_out(model.annotate_text("Ông Nguyễn Khắc Chúc  đang làm việc tại Đại học Quốc gia Hà Nội. Bà Lan, vợ ông Chúc, cũng làm việc tại đây."))
+text = "Sau hai thế kỷ, chính sách đóng cửa đất nước dưới thời Mạc phủ Tokugawa đã đi đến kết thúc khi Nhật Bản bị Hoa Kỳ ép mở cửa giao thương vào năm 1854. Những năm tiếp theo cuộc Minh Trị duy tân năm 1868 và sự sụp đổ của chế độ mạc phủ, Nhật Bản đã tự chuyển đổi từ một xã hội khá lạc hậu và phong kiến sang một quốc gia công nghiệp hiện đại. Nhật đã cử các phái đoàn và sinh viên đi khắp thế giới để học và tiếp thu khoa học và nghệ thuật phương Tây, điều này đã được thực hiện nhằm giúp Nhật Bản tránh khỏi rơi vào ách thống trị của nước ngoài và cũng giúp cho Nhật có thể cạnh tranh ngang ngửa với các cường quốc phương Tây.",
+print(text.split("."))
