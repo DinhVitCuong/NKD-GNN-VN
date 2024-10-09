@@ -20,6 +20,7 @@ PEOPLE = [
     "đại_biểu_quốc_hội", "nghệ_sĩ_điện_ảnh", "nhà_đạo_diễn", "nhà_sản_xuất_phim", 
     "diễn_viên_hài", "nhà_ảo_thuật", "kẻ_xấu", "người_tị_nạn", "người_công_giáo", 
     "người_hồi_giáo", "nhà_tu_hành", "nhà_ngoại_giao", "người_tiêu_dùng", "người_nông_dân",
+    "đàn_ông", "phụ_nữ"
     
     # Danh từ chỉ nhóm người
     "đội", "nhóm", "băng", "bộ_tộc", "gia_đình", "họ_hàng", "bạn_bè", 
@@ -47,13 +48,13 @@ PEOPLE = [
 PLACE = [
     # Địa điểm hành chính, tự nhiên, và cư trú
     "quốc_gia", "thành_phố", "thị_trấn", "xã", "phường", "quận", "tỉnh", "khu_phố",
-    "biên_giới", "bãi_biển", "đảo", "núi", "khu_rừng", "cánh_đồng", "đồng_bằng", 
-    "đầm_lầy", "sông", "suối", "hồ", "vịnh", "thác_nước", "hang_động", 
+    "tòa", "toà", "nhà", "biên_giới", "bãi_biển", "đảo", "núi", "khu_rừng", "cánh_đồng", 
+    "đồng_bằng", "đầm_lầy", "sông", "suối", "hồ", "vịnh", "thác_nước", "hang_động", 
     "vườn_quốc_gia", "khu_bảo_tồn", "vùng_đồng_bằng_sông_cửu_long", 
     "vùng_đông_nam_bộ", "cao_nguyên", "thảo_nguyên", "hoang_mạc", "sa_mạc", 
     "vùng_lãnh_thổ", "vườn_hoa", "khu_dân_cư", "khu_nhà_ở", "khu_tái_định_cư", 
     "khu_chung_cư", "chung_cư", "nhà_trọ", "thôn", "ấp", "làng", "xóm", "bản", 
-    "khu_trại", "khu_căn_hộ", "khu_vực_cấm"
+    "khu_trại", "khu_căn_hộ", "khu_vực_cấm",
 ]
 
 ORGANIZATION = [
@@ -81,8 +82,8 @@ ORGANIZATION = [
     "trạm_xăng", "nhà_đấu_giá", "công_ty_du_lịch", "hãng_hàng_không",
     
     # Địa điểm giải trí, văn hóa
-    "công_viên", "sân_bóng", "sân_vận_động", "rạp_chiếu_phim", "rạp_hát", "nhà_hát", 
-    "bảo_tàng", "thư_viện", "nhà_sách", "sân_khấu", "khu_vui_chơi", "sở_thú", 
+    "quảng_trường", "công_viên", "sân_bóng", "sân_vận_động", "rạp_chiếu_phim", "rạp_hát", 
+    "nhà_hát", "bảo_tàng", "thư_viện", "nhà_sách", "sân_khấu", "khu_vui_chơi", "sở_thú", 
     "thủy_cung", "nhà_trẻ", "trường_múa", "phòng_tranh", "vườn_thú", "trung_tâm_thể_thao",
     
     # Địa điểm tôn giáo, tín ngưỡng
@@ -94,4 +95,15 @@ ORGANIZATION = [
     "ga_tàu_điện", "trạm_thu_phí", "trạm_dừng_xe", "bãi_đỗ_xe", "bến_phà", 
     "khu_vực_trả_hàng", "trạm_giao_hàng", "bãi_đỗ_tàu"
 ]
-
+number_map = {
+    "một": 1,
+    "hai": 2,
+    "ba": 3,
+    "bốn": 4,
+    "năm": 5,
+    "sáu": 6,
+    "bảy": 7,
+    "tám": 8,
+    "chín": 9,
+    "mười": 10
+}

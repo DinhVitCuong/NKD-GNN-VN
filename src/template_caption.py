@@ -1,10 +1,10 @@
 import py_vncorenlp
-from word_lists import PEOPLE, PLACE, ORGANIZATION
+from word_lists import PEOPLE, PLACE, ORGANIZATION, number_map
 # Automatically download VnCoreNLP components from the original repository
-py_vncorenlp.download_model(save_dir=r'E:\DATN\NKD-GNN-test\VnCoreNLP')
+py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
 # Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
-model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'E:\DATN\NKD-GNN-test\VnCoreNLP')
+model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
 # Define placeholder tags
 PERSON_PLACEHOLDER = "<PERSON>"
@@ -35,25 +35,31 @@ def generate_template_caption(text):
         # Loop over each sentence in the annotation result (annotations is a dictionary with indices as keys)
         for sentence_key in annotations:
             sentence = annotations[sentence_key]
-            
+            #To reduce from 2-3 posTag "N" sit next together only return 1 "N" tag
+            flag = False
             # Process each token in the sentence
             for token in sentence:
                 word = token['wordForm']
                 pos_tag = token['posTag']
-                if pos_tag == 'N':
-                    if word in PLACE:
-                        result.append(PLACE_PLACEHOLDER)
-                    elif word in PEOPLE:
+                if pos_tag == 'N' and flag == False:
+                    if word.lower() in PEOPLE:
                         result.append(PERSON_PLACEHOLDER)
-                    elif word in ORGANIZATION:
+                    elif word.lower() in PLACE:
+                        result.append(PLACE_PLACEHOLDER)
+                    elif word.lower() in ORGANIZATION:
                         result.append(ORGANIZATION_PLACEHOLDER)
                     else:
                         result.append(word)
-                else:
+                    flag = True
+                elif pos_tag == 'N' and flag == True:
+                    continue
+                elif pos_tag !='Nc' and pos_tag != 'P':
                     result.append(word)
-        caption = caption.append(' '.join(result))
+                    flag = False
+        
+        caption.append(' '.join(result))
     # Join the processed tokens back into a sentence
-    return ' '.join(caption)
+    return '. '.join(caption).strip(" .")
 
 
 # Example usage
