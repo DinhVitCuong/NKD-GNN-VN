@@ -6,16 +6,10 @@ py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNL
 # Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
 model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
-# Define placeholder tags
 PERSON_PLACEHOLDER = "<PERSON>"
 PLACE_PLACEHOLDER = "<PLACE>"
 ORGANIZATION_PLACEHOLDER = "<ORGANIZATION>"
-
-# # Define a list of common words in Vietnamese
-
-
-# Function to generate template captions with placeholders
-def generate_template_caption(text):
+def generate_template_caption(text, model):
 
     # Split into sentences
     sentences = text.split(".")
@@ -38,11 +32,21 @@ def generate_template_caption(text):
             #To reduce from 2-3 posTag "N" sit next together only return 1 "N" tag
             flag = False
             # Process each token in the sentence
+            prev_word = ""
+            prev_pos_tag = ""
             for token in sentence:
                 word = token['wordForm']
                 pos_tag = token['posTag']
                 if pos_tag == 'N' and flag == False:
                     if word.lower() in PEOPLE:
+                        if prev_pos_tag == 'M':
+                            try:
+                                num_person = number_map[prev_word.lower()]
+                            except:
+                                num_person = 1
+                            result.pop()
+                            for i in range(num_person - 1):
+                                result.append(PERSON_PLACEHOLDER + ",")
                         result.append(PERSON_PLACEHOLDER)
                     elif word.lower() in PLACE:
                         result.append(PLACE_PLACEHOLDER)
@@ -56,19 +60,13 @@ def generate_template_caption(text):
                 elif pos_tag !='Nc' and pos_tag != 'P':
                     result.append(word)
                     flag = False
-        
+                    prev_word = word
+                    prev_pos_tag = pos_tag
+
         caption.append(' '.join(result))
     # Join the processed tokens back into a sentence
     return '. '.join(caption).strip(" .")
-
-
-# Example usage
-if __name__ == "__main__":
-    # Sample Vietnamese text containing named entities and building-related words
-    vietnamese_sentence = "Anh ấy đã phát biểu tại tòa nhà Quốc hội. Hai người đàn ông đang đấm nhau ở quảng trường"
-
-    # Generate template caption with placeholders
-    template_caption = generate_template_caption(vietnamese_sentence)
-
-    print("Original Sentence: ", vietnamese_sentence)
-    print("Template Caption: ", template_caption)
+####EXAMPLE USAGE:
+# text = "Anh ấy đã phát biểu tại tòa nhà Quốc hội. Ba người đàn ông đang đấm nhau ở quảng trường. Tiểu đội 3 đang tiến quân tới sân vận động"
+# print(f'Original: {text}')
+# print(f'Template: {generate_template_caption(text)}')
