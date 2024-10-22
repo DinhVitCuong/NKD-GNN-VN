@@ -1,12 +1,14 @@
 import networkx as nx
 import py_vncorenlp
+import torch
 import matplotlib.pyplot as plt
+from torch_geometric.utils import from_networkx
 
 # Automatically download VnCoreNLP components from the original repository
-py_vncorenlp.download_model(save_dir='E:/DATN/NKD-GNN-test/VnCoreNLP')
+py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
 # Load VnCoreNLP from the specified folder
-model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir='E:/DATN/NKD-GNN-test/VnCoreNLP',max_heap_size='-Xmx4g')
+model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP',max_heap_size='-Xmx4g')
 
 # Function to extract named entities and build the knowledge graph
 def build_knowledge_graph(text):
@@ -124,6 +126,11 @@ def print_word_segmented_sentences(sentences):
     for i, sentence in enumerate(sentences):
         print(f"Sentence {i + 1}: {sentence}")
 
+def convert_networkx_to_data(G):
+    data = from_networkx(G)
+    edge_weights = [G[u][v]['weight'] for u, v in G.edges()]
+    data.edge_attr = torch.tensor(edge_weights, dtype=torch.float)
+    return data
 # Example usage
 if __name__ == "__main__":
     # Example text provided in your input
@@ -139,3 +146,5 @@ if __name__ == "__main__":
     print_word_segmented_sentences(word_segmented_sentences)
 
     visualize_knowledge_graph(G)
+
+    print(G)
