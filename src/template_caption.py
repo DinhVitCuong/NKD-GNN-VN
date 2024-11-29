@@ -4,20 +4,20 @@ from word_lists import PEOPLE, PLACE, ORGANIZATION, number_map
 py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
 # Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
-model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
+model_vncore = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
-PERSON_PLACEHOLDER = "<PERSON>"
-PLACE_PLACEHOLDER = "<PLACE>"
-ORGANIZATION_PLACEHOLDER = "<ORGANIZATION>"
-def generate_template_caption(text, model):
 
+def generate_template_caption(text, model_vncore):
+    PERSON_PLACEHOLDER = "<PERSON>"
+    PLACE_PLACEHOLDER = "<PLACE>"
+    ORGANIZATION_PLACEHOLDER = "<ORGANIZATION>"
     # Split into sentences
     sentences = text.split(".")
 
     # Annotate the chunk with VnCoreNLP
     caption = []
     for splited_sentence in sentences:
-        annotations = model.annotate_text(splited_sentence)
+        annotations = model_vncore.annotate_text(splited_sentence)
 
         # Initialize a list to store the processed tokens
         result = []

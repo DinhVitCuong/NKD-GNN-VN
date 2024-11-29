@@ -8,10 +8,10 @@ from torch_geometric.utils import from_networkx
 py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
 
 # Load VnCoreNLP from the specified folder
-model = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP',max_heap_size='-Xmx4g')
+model_vncore = py_vncorenlp.VnCoreNLP(annotators=["wseg", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP',max_heap_size='-Xmx4g')
 
 # Function to extract named entities and build the knowledge graph
-def build_knowledge_graph(text):
+def build_knowledge_graph(text, model_vncore):
     # Create an empty graph
     G = nx.Graph()
 
@@ -28,7 +28,7 @@ def build_knowledge_graph(text):
 
     # Annotate the chunk with VnCoreNLP
     for splited_sentence in sentences:
-        annotations = model.annotate_text(splited_sentence)
+        annotations = model_vncore.annotate_text(splited_sentence)
 
         for sentence_key in annotations:
             sentence = annotations[sentence_key]
