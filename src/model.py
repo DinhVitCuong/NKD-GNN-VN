@@ -35,7 +35,7 @@ class VGG19Encoder(nn.Module):
         return features
     
 class LSTMDecoder(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
+    def __init__(self, embed_size = 256, hidden_size = 512, vocab_size =10000, num_layers=1):
         super(LSTMDecoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embed_size)
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
