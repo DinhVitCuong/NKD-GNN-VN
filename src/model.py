@@ -1,202 +1,164 @@
-import sys
-import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 import torchvision.models as models
+import torch.nn.functional as F
+from torch_geometric.nn import GATConv, global_mean_pool
 
-from preprocess_image import resize_image
-
-######################## TEMPLATE CAPTION GENERATOR ###############################
-
-# CNN Encoder with Pre-trained
-class VGG19Encoder(nn.Module):
-    def __init__(self, embed_size):
-        super(VGG19Encoder, self).__init__()
-        # Load pre-trained
-        vgg = models.vgg19(pretrained=True)
-        # Remove the last fully connected layer (fc) of 
-        self.vgg = nn.Sequential(*list(vgg.children())[:-1])
-        # Linear layer to map ResNet output to embedding size
-        self.fc = nn.Linear(vgg.fc.in_features, embed_size)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.5)
-
+class ImageEncoder(nn.Module):
+    """
+    Mô hình trích xuất đặc trưng ảnh sử dụng ResNet-50
+    """
+    def __init__(self, embed_size, pretrained=True):
+        super(ImageEncoder, self).__init__()
+        
+        # Load ResNet-50 pre-trained
+        self.cnn = models.resnet50(pretrained=pretrained)
+        
+        # Thay thế lớp fully connected cuối cùng
+        in_features = self.cnn.fc.in_features
+        self.cnn.fc = nn.Sequential(
+            nn.Linear(in_features, embed_size),
+            nn.ReLU(),
+            nn.Dropout(0.5)
+        )
+        
     def forward(self, images):
-        # Extract features using 
-        with torch.no_grad():  # Disable gradient computation for ResNet
-            features = self.vgg(images)
-        # Flatten the features and pass through a linear layer
-        features = features.view(features.size(0), -1)
-        features = self.fc(features)
-        features = self.relu(features)
-        features = self.dropout(features)
+        features = self.cnn(images)  # (batch_size, embed_size)
         return features
-    
-class LSTMDecoder(nn.Module):
-    def __init__(self, embed_size = 256, hidden_size = 512, vocab_size =10000, num_layers=1):
-        super(LSTMDecoder, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, vocab_size)
-
-    def forward(self, features, captions):
-        embeddings = self.embedding(captions)
-        embeddings = torch.cat((features.unsqueeze(1), embeddings), dim=1)
-        hiddens, _ = self.lstm(embeddings)
-        outputs = self.fc(hiddens)
-        return outputs
-    
-# Full model combining CNN encoder and LSTM decoder
-class image_captioning_model(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
-        super().__init__()
-        self.encoder = VGG19Encoder(embed_size)
-        self.decoder = LSTMDecoder(embed_size, hidden_size, vocab_size, num_layers)
-
-    def forward(self, images, captions):
-        features = self.encoder(images)
-        outputs = self.decoder(features, captions)
-        return outputs
-
-################################ NKDGNN #####################################
 
 class NKDGNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super(NKDGNN, self).__init__()
-        self.layers = nn.ModuleList()
-        self.num_layers = num_layers
-
-        # Initialize the GCN layers (using GCNConv to use edge weights)
-        self.layers.append(GCNConv(input_dim, hidden_dim))
-        for _ in range(num_layers - 2):
-            self.layers.append(GCNConv(hidden_dim, hidden_dim))
-        self.layers.append(GCNConv(hidden_dim, output_dim))
-        
-        # Attention mechanism parameters
-        self.q = nn.Parameter(torch.Tensor(hidden_dim))
-        self.W1 = nn.Linear(output_dim, hidden_dim)
-        self.W2 = nn.Linear(output_dim, hidden_dim)
-        self.W3 = nn.Linear(2 * hidden_dim, output_dim)
-        self.softmax = nn.Softmax(dim=1)
-
-    def forward(self, data):
-        x, edge_index, edge_weight = data.x, data.edge_index, data.edge_attr
-        
-        # Apply GCN layers with edge weights and ReLU activation
-        for layer in self.layers[:-1]:
-            x = F.relu(layer(x, edge_index, edge_weight=edge_weight))
-        x = self.layers[-1](x, edge_index, edge_weight=edge_weight)
-        
-        # Generate the global representation vector Ng using attention
-        global_vector = self.calculate_global_vector(x)
-        key_vector = self.calculate_key_entity_vector(x, data.edge_index)
-        
-        # Compute the news knowledge graph representation Nr
-        Nr = self.generate_graph_representation(global_vector, key_vector)
-        return Nr
-
-    def calculate_global_vector(self, x):
-        """Calculates the global representation vector Ng using attention mechanism."""
-        alpha = torch.tanh(self.W1(x) + self.W2(x.mean(dim=0)))
-        alpha = torch.matmul(alpha, self.q)
-        attention_weights = self.softmax(alpha)
-        Ng = torch.sum(attention_weights.unsqueeze(-1) * x, dim=0)
-        return Ng
-
-    def calculate_key_entity_vector(self, x, edge_index):
-        """Finds and returns the vector of the key entity (node with the most edges)."""
-        degrees = torch.bincount(edge_index[0])
-        key_entity_index = degrees.argmax()
-        return x[key_entity_index]
-
-    def generate_graph_representation(self, global_vector, key_vector):
-        """Generates the final graph representation vector Nr."""
-        combined_vector = torch.cat((global_vector, key_vector), dim=0)
-        Nr = torch.tanh(self.W3(combined_vector))
-        return Nr
-
-class PredictionModule(nn.Module):
-    def __init__(self, input_dim):
-        super(PredictionModule, self).__init__()
-        self.linear = nn.Linear(input_dim, input_dim)
-        self.softmax = nn.Softmax(dim=1)
-
-    def forward(self, entity_vectors, graph_representation):
-        z_hat = torch.matmul(entity_vectors, graph_representation.T)
-        y_hat = self.softmax(z_hat)
-        return y_hat
-
-def loss_function(y_hat, y_true):
-    """Computes the cross-entropy loss."""
-    loss = -torch.sum(y_true * torch.log(y_hat) + (1 - y_true) * torch.log(1 - y_hat))
-    return loss
-
-def get_node_probabilities(model, prediction_module, data):
     """
-    Given the NKDGNN model and PredictionModule, returns the probabilities for each node in the graph.
-    
-    Parameters:
-    - model: The NKDGNN model instance
-    - prediction_module: The PredictionModule instance
-    - data: The graph data containing node features, edge indices, etc.
-    
-    Returns:
-    - y_hat: The probabilities of each node being selected as the placeholder.
+    Neural Knowledge-Driven GNN với cải tiến attention
     """
-    # Pass the data through NKDGNN to get the graph representation Nr
-    Nr = model(data)  # Output from NKDGNN, representing the entire graph
-    
-    # Get the probabilities for each node using the PredictionModule
-    y_hat = prediction_module(data.x, Nr)  # y_hat contains probabilities for each node
-    
-    return y_hat
-
-########################## CAPTION GENERATOR ###########################
-
-class CaptionGenerator:
-    def __init__(self, model, prediction_module):
-        self.model = model
-        self.prediction_module = prediction_module
-
-    def predict_caption(self, data, template):
-        # Pass the data through NKDGNN to get the graph representation Nr
-        Nr = self.model(data)
+    def __init__(self, visual_dim, graph_dim, hidden_dim, num_heads=4):
+        super().__init__()
         
-        # Get the probabilities for each node using the prediction module
-        y_hat = self.prediction_module(data.x, Nr)  # y_hat contains probabilities for each node
+        # Graph Processing
+        self.gat1 = GATConv(graph_dim, hidden_dim, heads=num_heads)
+        self.gat2 = GATConv(hidden_dim*num_heads, hidden_dim, heads=1)
         
-        # Decode the predicted nodes based on the placeholders in the template
-        filled_caption = self.fill_template_with_entities(template, data, y_hat)
-        return filled_caption
-
-    def fill_template_with_entities(self, template, data, y_hat):
-        """
-        Fills in the template with the most likely entities based on the node types and probabilities.
-        """
-        # Example placeholders and their corresponding node types in the graph
-        placeholders = ['<PERSON>', '<ORGANIZATION>', '<PLACE>', '<BUILDING>']
+        # Visual Projection
+        self.visual_proj = nn.Linear(visual_dim, hidden_dim)
         
-        # Initialize a dictionary to store the best matching nodes for each placeholder
-        entity_mapping = {placeholder: None for placeholder in placeholders}
+        # Cross-modal Attention
+        self.attention = nn.MultiheadAttention(hidden_dim, num_heads)
+        
+        # Fusion Layer
+        self.fusion = nn.Linear(hidden_dim*2, hidden_dim)
 
-        # Iterate over the placeholders
-        for placeholder in placeholders:
-            # Find nodes in the graph that match the type of the placeholder
-            matching_indices = [
-                i for i, node_type in enumerate(data.node_types) if node_type == placeholder
-            ]
+    def forward(self, visual_feats, graph_data):
+        # Xử lý đồ thị
+        x, edge_index, batch = graph_data.x, graph_data.edge_index, graph_data.batch
+        x = F.relu(self.gat1(x, edge_index))
+        x = F.relu(self.gat2(x, edge_index))
+        graph_feats = global_mean_pool(x, batch)  # (batch_size, hidden_dim)
+        
+        # Xử lý ảnh
+        visual_feats = F.relu(self.visual_proj(visual_feats))  # (batch_size, hidden_dim)
+        
+        # Cross-modal Attention
+        attn_output, _ = self.attention(
+            visual_feats.unsqueeze(0),
+            graph_feats.unsqueeze(0),
+            graph_feats.unsqueeze(0)
+        )
+        
+        # Hợp nhất đặc trưng
+        combined = torch.cat([visual_feats, attn_output.squeeze(0)], dim=1)
+        fused_features = F.relu(self.fusion(combined))
+        
+        return fused_features
+
+class CaptionDecoder(nn.Module):
+    """
+    Module tạo caption sử dụng LSTM với cơ chế attention
+    """
+    def __init__(self, embed_size, hidden_size, vocab_size, num_layers=1):
+        super().__init__()
+        
+        self.embed = nn.Embedding(vocab_size, embed_size)
+        self.lstm = nn.LSTM(embed_size + hidden_size, hidden_size, num_layers, batch_first=True)
+        self.attention = nn.Linear(hidden_size, 1)
+        self.fc = nn.Linear(hidden_size, vocab_size)
+        
+    def forward(self, features, captions, teacher_forcing_ratio=0.5):
+        batch_size = features.size(0)
+        embeddings = self.embed(captions)  # (batch_size, seq_len, embed_size)
+        hiddens = []
+        h = features.unsqueeze(0)  # (num_layers, batch_size, hidden_size)
+        c = torch.zeros_like(h)
+        
+        # Tạo caption từng từ
+        for t in range(captions.size(1)-1):
+            # Tính attention weights
+            attention_weights = F.softmax(self.attention(h[-1]), dim=1)  # (batch_size, 1)
             
-            if matching_indices:
-                # Select the node with the highest probability among the matching nodes
-                best_node_idx = max(matching_indices, key=lambda idx: y_hat[idx].item())
-                entity_mapping[placeholder] = data.node_labels[best_node_idx]
+            # Context vector
+            context = attention_weights * features  # (batch_size, hidden_size)
+            
+            # Ghép embedding và context
+            lstm_input = torch.cat([embeddings[:,t], context], dim=1).unsqueeze(1)
+            
+            # LSTM step
+            out, (h, c) = self.lstm(lstm_input, (h, c))
+            
+            # Dự đoán từ
+            outputs = self.fc(out.squeeze(1))
+            hiddens.append(outputs)
+            
+            # Teacher forcing
+            if torch.rand(1) < teacher_forcing_ratio:
+                next_word = captions[:, t+1]
+            else:
+                next_word = outputs.argmax(1)
+                
+            embeddings[:, t+1] = self.embed(next_word)
+            
+        return torch.stack(hiddens, dim=1)
 
-        # Fill the template with the selected entities
-        filled_caption = template
-        for placeholder, entity in entity_mapping.items():
-            if entity:
-                filled_caption = filled_caption.replace(placeholder, entity)
+class ImageCaptionModel(nn.Module):
+    """
+    Mô hình end-to-end hoàn chỉnh
+    """
+    def __init__(self, embed_size, graph_dim, hidden_size, vocab_size):
+        super().__init__()
         
-        return filled_caption
+        # Các thành phần
+        self.encoder = ImageEncoder(embed_size)
+        self.nkdgnn = NKDGNN(embed_size, graph_dim, hidden_size)
+        self.decoder = CaptionDecoder(embed_size, hidden_size, vocab_size)
+        
+    def forward(self, images, graph_data, captions=None, teacher_forcing_ratio=0.5):
+        # Trích xuất đặc trưng
+        visual_features = self.encoder(images)  # (batch_size, embed_size)
+        
+        # Xử lý đồ thị tri thức
+        fused_features = self.nkdgnn(visual_features, graph_data)  # (batch_size, hidden_size)
+        
+        # Tạo caption
+        if captions is not None:
+            outputs = self.decoder(fused_features, captions, teacher_forcing_ratio)
+        else:
+            # Inference mode
+            outputs = self.generate(fused_features)
+            
+        return outputs
+    
+    def generate(self, features, max_len=20):
+        # Tạo caption từ đầu
+        batch_size = features.size(0)
+        captions = [torch.zeros(batch_size, dtype=torch.long).to(features.device)]
+        
+        h = features.unsqueeze(0)
+        c = torch.zeros_like(h)
+        
+        for _ in range(max_len):
+            embeddings = self.decoder.embed(captions[-1]).unsqueeze(1)
+            context = features.unsqueeze(1)
+            lstm_input = torch.cat([embeddings, context], dim=2)
+            
+            out, (h, c) = self.decoder.lstm(lstm_input, (h, c))
+            outputs = self.decoder.fc(out.squeeze(1))
+            captions.append(outputs.argmax(dim=1))
+            
+        return torch.stack(captions[1:], dim=1)
