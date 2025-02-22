@@ -48,6 +48,6 @@ Our implementation has been fully adapted to support the Vietnamese language. It
 Clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/yourusername/news-image-text-matching-vn.git
+git clone https://github.com/DinhVitCuong/NKD-GNN-VN.git
 cd news-image-text-matching-vn
 pip install -r requirements.txt
