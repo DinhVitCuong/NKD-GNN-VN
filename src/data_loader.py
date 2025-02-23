@@ -76,3 +76,4 @@ def collate_fn(batch):
         "captions": captions,
         "templates": templates
     }
+

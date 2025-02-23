@@ -68,7 +68,6 @@ def print_entities_and_cooccurrences(G, entity_list):
     print("Entities:")
     for entity, entity_type, frequency in entity_list:
         print(f"Entity: {entity}, Type: {entity_type}, Frequency: {frequency}")
-    
     print("\nCo-occurrences (Edges):")
     for edge in G.edges(data=True):
         print(f"Entity 1: {edge[0]}, Entity 2: {edge[1]}, Co-occurrence Count: {edge[2]['cooccurrence_count']}, Weight: {edge[2]['weight']}")

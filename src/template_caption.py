@@ -85,3 +85,4 @@ def generate_template_caption(text, nlp):
 # text = "Anh ấy đã phát biểu tại tòa nhà Quốc hội. Ba người đàn ông đang đấm nhau ở quảng trường. Tiểu đội 3 đang tiến quân tới sân vận động"
 # print(f'Original: {text}')
 # print(f'Template: {generate_template_caption(text, nlp)}')
+

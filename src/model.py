@@ -162,3 +162,4 @@ class ImageCaptionModel(nn.Module):
             captions.append(outputs.argmax(dim=1))
             
         return torch.stack(captions[1:], dim=1)
+
