@@ -37,8 +37,7 @@ Our implementation has been fully adapted to support the Vietnamese language. It
 - [torchvision](https://pytorch.org/vision/stable/index.html)
 - OpenCV
 - NumPy
-- Pandas
-- Vietnamese NLP toolkit (stanza (recommended) or VNCoreNLP)
+- Vietnamese NLP toolkit
 - Additional packages listed in `requirements.txt`
 
 ---
