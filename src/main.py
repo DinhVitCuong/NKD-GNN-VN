@@ -1,128 +1,133 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torchvision.models as models
-import torchvision.transforms as transforms
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 from PIL import Image
-import numpy as np
+import json
 import argparse
-from tqdm import tqdm
-import logging
-import py_vncorenlp
-
-from preprocess_image import resize_image
-from model import image_captioning_model, NKDGNN, PredictionModule, CaptionGenerator, get_node_probabilities, loss_function
-from knowledge_graph import build_knowledge_graph,convert_networkx_to_data
+import os
+from model import ImageCaptionModel
+from knowledge_graph import build_knowledge_graph
 from template_caption import generate_template_caption
+from data_loader import CustomDataset, collate_fn
+from transformers import AutoTokenizer, AutoModel
+from torch import nn
+from torch_geometric.data import Batch
 
+# Khởi tạo PhoBERT tokenizer và model
+phobert_tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", use_fast=False)
+phobert_model = AutoModel.from_pretrained("vinai/phobert-base")
 
-logging.basicConfig(
-    filename="training.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-################## TRAINING #########################
-def train(model, prediction_module, data_loader, optimizer, criterion, epochs):
-    model.train()
-    prediction_module.train()
-    for epoch in range(epochs):
+def train(args):
+    # Khởi tạo model
+    model = ImageCaptionModel(
+        embed_size=args.embed_size,
+        graph_dim=args.graph_dim,
+        hidden_size=args.hidden_size,
+        vocab_size=phobert_tokenizer.vocab_size  # Sử dụng vocab size từ PhoBERT
+    ).to(args.device)
+    
+    # Chuẩn bị dữ liệu
+    dataset = CustomDataset(args.data_path)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
+    
+    # Loss và optimizer
+    criterion = nn.CrossEntropyLoss(ignore_index=phobert_tokenizer.pad_token_id)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    
+    # Huấn luyện
+    for epoch in range(args.epochs):
+        model.train()
         total_loss = 0
-        progress_bar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{epochs}")
-        for data in progress_bar:
-            try:
-                optimizer.zero_grad()
-                Nr = model(data)  # Graph-level representation
-                y_hat = prediction_module(data.x, Nr)  # Node-level predictions
-                loss = criterion(y_hat, data.y)
-                loss.backward()
-                optimizer.step()
-                total_loss += loss.item()
-                progress_bar.set_postfix({"Loss": loss.item()})
-            except Exception as e:
-                logging.error(f"Error during training: {e}")
-                progress_bar.set_postfix({"Error": "Check logs"})
-        logging.info(f"Epoch {epoch + 1} completed with total loss: {total_loss:.4f}")
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss:.4f}")
+        
+        for batch in dataloader:
+            images = batch["images"].to(args.device)
+            graph_data = batch["graph_data"].to(args.device)
+            captions = batch["captions"]
+            
+            # Tokenize bằng PhoBERT
+            inputs = phobert_tokenizer(
+                captions,
+                padding="max_length",
+                max_length=64,
+                truncation=True,
+                return_tensors="pt"
+            )
+            caption_ids = inputs["input_ids"].to(args.device)
+            
+            # Forward pass
+            outputs = model(images, graph_data, caption_ids)
+            loss = criterion(outputs.view(-1, phobert_tokenizer.vocab_size), caption_ids.view(-1))
+            
+            # Backward và optimize
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+        
+        print(f"Epoch {epoch+1}, Loss: {total_loss/len(dataloader):.4f}")
+        torch.save(model.state_dict(), f"checkpoint_epoch_{epoch+1}.pt")
 
-
-
-
-##################### PREDICT ########################
-def evaluate(model, prediction_module, data_loader, caption_generator):
+def evaluate(args):
+    model = ImageCaptionModel(
+        embed_size=args.embed_size,
+        graph_dim=args.graph_dim,
+        hidden_size=args.hidden_size,
+        vocab_size=phobert_tokenizer.vocab_size
+    ).to(args.device)
+    model.load_state_dict(torch.load(args.checkpoint))
     model.eval()
-    prediction_module.eval()
+    
+    dataset = CustomDataset(args.data_path)
+    dataloader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate_fn)
+    
+    results = []
     with torch.no_grad():
-        for data in tqdm(data_loader, desc="Evaluating"):
-            try:
-                Nr = model(data)
-                node_probabilities = prediction_module(data.x, Nr)
-                logging.info(f"Node Probabilities: {node_probabilities}")
-                # Generate captions
-                template = "<PERSON> met <ORGANIZATION> at <PLACE>."
-                generated_caption = caption_generator.predict_caption(data, template)
-                logging.info(f"Generated Caption: {generated_caption}")
-                print("Generated Caption:", generated_caption)
-            except Exception as e:
-                logging.error(f"Error during evaluation: {e}")
-
-
-
-
-def get_args():
-    parser = argparse.ArgumentParser(description="Training Script Arguments")
-    # Argument for determine train or test
-    parser.add_argument('--isEval', type=bool, default=True,
-                        help='True: Evaluate, False: Train (Default True)')
- 
-
-    # Argument for the data path (train or test)
-    parser.add_argument('--datapath', type=str, required=True,
-                        help='Path to the dataset (.json files)')
-
-    # Optional arguments
-    parser.add_argument('--batch_size', type=int, default=32,
-                        help='Batch size for training/testing (default: 32)')
-    parser.add_argument('--epochs', type=int, default=10,
-                        help='Number of epochs for training (default: 10)')
-    parser.add_argument('--layers', type=int, default=3,
-                        help='Number of layers (default: 3)')
-
-    args = parser.parse_args()
-    return args
+        for batch in dataloader:
+            images = batch["images"].to(args.device)
+            graph_data = batch["graph_data"].to(args.device)
+            
+            # Sinh caption
+            generated_ids = model.generate(images, graph_data)
+            
+            # Giải mã tokens
+            decoded_captions = phobert_tokenizer.batch_decode(
+                generated_ids, 
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=True
+            )
+            results.extend(decoded_captions)
+    
+    # Lưu kết quả
+    with open(args.output_file, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
-    args = get_args()
-    print(f"Is Evaluate: {args.isEval}")
-    print(f"Data Path: {args.datapath}")
-    print(f"Batch Size: {args.batch_size}")
-    print(f"Epochs: {args.epochs}")
-    print(f"Number of Layers: {args.layers}")
-    # Example parameter
-    input_dim = 1
-    hidden_dim = 64
-    output_dim = 32
-    num_layers = 3
-
-    # Instantiate the model
-    # Automatically download VnCoreNLP components from the original repository
-    py_vncorenlp.download_model(save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
-
-    # Load VnCoreNLP from the local working folder that contains both `VnCoreNLP-1.2.jar` and `models`
-    model_vncore = py_vncorenlp.VnCoreNLP(annotators=["wseg", "pos", "ner"], save_dir=r'D:\Study\DATN\model\NKD-GNN-test\VnCoreNLP')
-
-    model = NKDGNN(input_dim, hidden_dim, output_dim, num_layers)
-    prediction_module = PredictionModule(output_dim)
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(prediction_module.parameters()), lr=0.01)
-    criterion = loss_function
-    caption_generator = CaptionGenerator(model, prediction_module)
-
+    parser = argparse.ArgumentParser()
     
-    if args.isEval:
-        logging.info("Starting evaluation...")
-        print("Evaluating...")
-        evaluate(model, prediction_module, data_loader, caption_generator)
+    # Tham số chung
+    parser.add_argument("--mode", choices=["train", "eval"], required=True)
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Đường dẫn dữ liệu
+    parser.add_argument("--data_path", required=True, help="Path to JSON data file")
+    parser.add_argument("--output_file", default="results.json")
+    
+    # Tham số model
+    parser.add_argument("--embed_size", type=int, default=256)
+    parser.add_argument("--graph_dim", type=int, default=300)
+    parser.add_argument("--hidden_size", type=int, default=512)
+    
+    # Tham số huấn luyện
+    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=15)
+    parser.add_argument("--lr", type=float, default=2e-5)  # Learning rate nhỏ hơn cho fine-tuning
+    parser.add_argument("--checkpoint", default="best_model.pt")
+    
+    args = parser.parse_args()
+    
+    if args.mode == "train":
+        train(args)
     else:
-        logging.info("Starting training...")
-        print("Training...")
-        train(model, prediction_module, data_loader, optimizer, criterion, args.epochs)
+        evaluate(args)
+
