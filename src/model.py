@@ -14,7 +14,6 @@ class ImageEncoder(nn.Module):
         # Load ResNet-50 pre-trained
         self.cnn = models.resnet50(pretrained=pretrained)
         
-        # Thay thế lớp fully connected cuối cùng
         in_features = self.cnn.fc.in_features
         self.cnn.fc = nn.Sequential(
             nn.Linear(in_features, embed_size),
