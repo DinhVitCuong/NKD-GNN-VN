@@ -4,19 +4,16 @@ import torch
 import matplotlib.pyplot as plt
 from torch_geometric.utils import from_networkx
 
-# Tải mô hình Stanza tiếng Việt
 stanza.download('vi')
 nlp = stanza.Pipeline('vi', processors='tokenize,ner')
 
-# Hàm xây dựng đồ thị tri thức
 def build_knowledge_graph(text, nlp_model):
     G = nx.Graph()
     entity_frequency = {}
     cooccurrence_frequency = {}
     word_segmented_sentences = []
     entity_dict = {}
-    
-    # Xử lý văn bản với Stanza
+
     doc = nlp_model(text)
     
     for sentence in doc.sentences:
@@ -26,7 +23,7 @@ def build_knowledge_graph(text, nlp_model):
         entities_in_sentence = []
         
         for entity in sentence.ents:
-            entity_text = entity.text  # Không thay thế dấu cách bằng gạch dưới
+            entity_text = entity.text
             entity_type = entity.type
             entity_frequency[(entity_text, entity_type)] = entity_frequency.get((entity_text, entity_type), 0) + 1
             entities_in_sentence.append((entity_text, entity_type))
@@ -54,7 +51,6 @@ def build_knowledge_graph(text, nlp_model):
     
     return G, word_segmented_sentences, entity_list
 
-# Hàm hiển thị đồ thị
 def visualize_knowledge_graph(G):
     pos = nx.spring_layout(G)
     plt.figure(figsize=(10, 7))
@@ -63,7 +59,6 @@ def visualize_knowledge_graph(G):
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
     plt.show()
 
-# Hàm hiển thị thực thể và đồng xuất hiện
 def print_entities_and_cooccurrences(G, entity_list):
     print("Entities:")
     for entity, entity_type, frequency in entity_list:
@@ -72,14 +67,12 @@ def print_entities_and_cooccurrences(G, entity_list):
     for edge in G.edges(data=True):
         print(f"Entity 1: {edge[0]}, Entity 2: {edge[1]}, Co-occurrence Count: {edge[2]['cooccurrence_count']}, Weight: {edge[2]['weight']}")
 
-# Chuyển đổi đồ thị NetworkX sang Torch Geometric Data
 def convert_networkx_to_data(G):
     data = from_networkx(G)
     edge_weights = [G[u][v]['weight'] for u, v in G.edges()]
     data.edge_attr = torch.tensor(edge_weights, dtype=torch.float)
     return data
 
-# # Ví dụ chạy thử
 # if __name__ == "__main__":
 #     text = "Sau hai thế kỷ, chính sách đóng cửa đất nước dưới thời Mạc phủ Tokugawa đã kết thúc khi Nhật Bản bị Hoa Kỳ ép mở cửa giao thương vào năm 1854. Những năm tiếp theo cuộc Minh Trị duy tân năm 1868 và sự sụp đổ của chế độ Mạc phủ, Nhật Bản đã chuyển đổi từ một xã hội phong kiến sang một quốc gia công nghiệp hiện đại."
     
