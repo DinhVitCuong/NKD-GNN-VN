@@ -18,19 +18,16 @@ phobert_tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", use_fast
 phobert_model = AutoModel.from_pretrained("vinai/phobert-base")
 
 def train(args):
-    # Khởi tạo model
     model = ImageCaptionModel(
         embed_size=args.embed_size,
         graph_dim=args.graph_dim,
         hidden_size=args.hidden_size,
-        vocab_size=phobert_tokenizer.vocab_size  # Sử dụng vocab size từ PhoBERT
+        vocab_size=phobert_tokenizer.vocab_size 
     ).to(args.device)
     
-    # Chuẩn bị dữ liệu
     dataset = CustomDataset(args.data_path)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     
-    # Loss và optimizer
     criterion = nn.CrossEntropyLoss(ignore_index=phobert_tokenizer.pad_token_id)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     
@@ -54,11 +51,9 @@ def train(args):
             )
             caption_ids = inputs["input_ids"].to(args.device)
             
-            # Forward pass
             outputs = model(images, graph_data, caption_ids)
             loss = criterion(outputs.view(-1, phobert_tokenizer.vocab_size), caption_ids.view(-1))
             
-            # Backward và optimize
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -87,10 +82,7 @@ def evaluate(args):
             images = batch["images"].to(args.device)
             graph_data = batch["graph_data"].to(args.device)
             
-            # Sinh caption
             generated_ids = model.generate(images, graph_data)
-            
-            # Giải mã tokens
             decoded_captions = phobert_tokenizer.batch_decode(
                 generated_ids, 
                 skip_special_tokens=True,
@@ -105,23 +97,19 @@ def evaluate(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
-    # Tham số chung
     parser.add_argument("--mode", choices=["train", "eval"], required=True)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     
-    # Đường dẫn dữ liệu
     parser.add_argument("--data_path", required=True, help="Path to JSON data file")
     parser.add_argument("--output_file", default="results.json")
     
-    # Tham số model
     parser.add_argument("--embed_size", type=int, default=256)
     parser.add_argument("--graph_dim", type=int, default=300)
     parser.add_argument("--hidden_size", type=int, default=512)
     
-    # Tham số huấn luyện
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=15)
-    parser.add_argument("--lr", type=float, default=2e-5)  # Learning rate nhỏ hơn cho fine-tuning
+    parser.add_argument("--lr", type=float, default=2e-5) 
     parser.add_argument("--checkpoint", default="best_model.pt")
     
     args = parser.parse_args()
