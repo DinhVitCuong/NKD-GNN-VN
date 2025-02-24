@@ -1,10 +1,7 @@
 import stanza
 from word_lists import PEOPLE, PLACE, ORGANIZATION, number_map
 
-# Tải model tiếng Việt
 stanza.download('vi')
-
-# Khởi tạo pipeline với tokenize, pos, ner
 nlp = stanza.Pipeline('vi', processors='tokenize,pos,ner')
 
 def generate_template_caption(text, nlp):
