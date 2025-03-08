@@ -1,7 +1,10 @@
 import stanza
 from word_lists import PEOPLE, PLACE, ORGANIZATION, number_map
 
+# Tải model tiếng Việt
 stanza.download('vi')
+
+# Khởi tạo pipeline với tokenize, pos, ner
 nlp = stanza.Pipeline('vi', processors='tokenize,pos,ner')
 
 def generate_template_caption(text, nlp):
@@ -79,7 +82,20 @@ def generate_template_caption(text, nlp):
     
     return '. '.join(caption).strip(" .").strip(".")
 
+def fill_template(template, entity_list):
+    # Sắp xếp entity_list theo giá trị xác suất giảm dần
+    sorted_entity_list = sorted(entity_list, key=lambda x: x[2], reverse=True)
+    
+    filled_caption = template
+    used_entities = {}
+    
+    for entity, entity_type, _ in sorted_entity_list:
+        placeholder = f"<{entity_type.upper()}>"
+        if placeholder in filled_caption and placeholder not in used_entities:
+            filled_caption = filled_caption.replace(placeholder, entity, 1)
+            used_entities[placeholder] = entity
+    
+    return filled_caption
 # text = "Anh ấy đã phát biểu tại tòa nhà Quốc hội. Ba người đàn ông đang đấm nhau ở quảng trường. Tiểu đội 3 đang tiến quân tới sân vận động"
 # print(f'Original: {text}')
 # print(f'Template: {generate_template_caption(text, nlp)}')
-

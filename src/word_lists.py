@@ -55,7 +55,6 @@ PLACE = [
     "vùng lãnh thổ", "vườn hoa", "khu dân cư", "khu nhà ở", "khu tái định cư", 
     "khu chung cư", "chung cư", "nhà trọ", "thôn", "ấp", "làng", "xóm", "bản", 
     "khu trại", "khu căn hộ", "khu vực cấm",
-
 ]
 
 ORGANIZATION = [
@@ -95,7 +94,6 @@ ORGANIZATION = [
     "sân bay", "nhà ga", "bến xe", "bến tàu", "trạm xe bus", "cảng", "bến cảng", 
     "ga tàu điện", "trạm thu phí", "trạm dừng xe", "bãi đỗ xe", "bến phà", 
     "khu vực trả hàng", "trạm giao hàng", "bãi đỗ tàu"
-
 ]
 number_map = {
     "một": 1,
