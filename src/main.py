@@ -10,7 +10,7 @@ from torch import nn
 from torch_geometric.data import Batch
 from torch_geometric.utils import from_networkx
 import stanza
-
+from tqdm import tqdm 
 
 from model import ImageCaptionModel
 from GNN import NKDGNN
@@ -31,39 +31,48 @@ def evaluate(models, dataloader, criterion, device):
     total_loss = 0
     
     with torch.no_grad():
-        for batch in dataloader:
+        progress_bar = tqdm(dataloader, desc="Evaluating")  # Added tqdm
+        for batch in progress_bar:
             images = batch["images"].to(device)
             texts = batch["texts"]
             captions = batch["captions"]
             entity_lists = batch["entity_list"]
             
-            # 1. Sinh caption ban đầu
+            # 1. Generate initial captions
             generated_ids = image_caption_model(images)
             generated_captions = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             
-            # 2. Đục lỗ caption
+            # 2. Mask captions
             template_captions = [generate_template_caption(c, stanza_model) for c in generated_captions]
             
-            # 3. Tạo đồ thị tri thức
+            # 3. Build knowledge graphs
             graph_list = []
+            entity_lists = []
+            entity_prob_list = []
             for paragraph in texts:
                 G, _, entities = build_knowledge_graph(paragraph, stanza_model)
-                graph_data = from_networkx(G)
-                graph_data.x = torch.eye(G.number_of_nodes(), dtype=torch.float)
-                graph_list.append(graph_data)
+                graph_list.append(G)
+                entity_lists.append(entities) 
+            # 4. Xử lý đồ thị tri thức bằng NKDGNN
+            for single_GA, single_EL in zip(graph_list, entity_lists):
+                edge_index = torch.tensor(list(single_GA.edges)).t().contiguous().to(args.device)
+                x = torch.tensor([single_GA.nodes[n]['frequency'] for n in single_GA.nodes]).float().unsqueeze(-1).to(args.device)
+                node_degree = torch.tensor([G.degree[n] for n in single_GA.nodes]).float().to(args.device)
+                ent_prob = nkdgnn(x, edge_index, node_degree)
+                results = []
+                for node, prob in zip(single_GA.nodes(), ent_prob):
+                    entity_info = next((e for e in single_EL if e[0] == node), None)
+                    if entity_info:
+                        results.append((entity_info[0], entity_info[1], prob.item()))
+                
+                entity_prob_list.append(sorted(results, key=lambda x: -x[2]))
             
-            # 4. Xử lý đồ thị tri thức
-            graph_data = [g.to(device) for g in graph_list]
-            entity_lists = [e.to(device) for e in entity_lists]
-            
-            entity_prob_list, _ = nkdgnn(graph_data, entity_lists)
-            
-            # 5. Điền vào template
+            # 5. Fill templates
             filled_captions = []
             for template, entities in zip(template_captions, entity_prob_list):
                 filled_captions.append(fill_template(template, entities))
             
-            # 6. Tính loss
+            # 6. Compute loss
             outputs = tokenizer(filled_captions, padding="max_length", max_length=64, truncation=True, return_tensors="pt")
             output_ids = outputs["input_ids"].to(device)
             
@@ -72,6 +81,7 @@ def evaluate(models, dataloader, criterion, device):
             
             loss = criterion(output_ids.view(-1, tokenizer.vocab_size), caption_ids.view(-1))
             total_loss += loss.item()
+            progress_bar.set_postfix({'val_loss': loss.item()})  # Update progress bar
     
     return total_loss / len(dataloader)
 
@@ -109,8 +119,8 @@ def train(args):
         nkdgnn.train()
         train_loss = 0
         
-        
-        for batch in train_loader:
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1} Training")  # Added tqdm
+        for batch in progress_bar:
             images = batch["images"].to(args.device)
             texts = batch["texts"]
             captions = batch["captions"]
@@ -174,18 +184,22 @@ def train(args):
             args.device
         )
         
-        print(f"Epoch {epoch+1}")
-        print(f"Train loss: {train_loss/len(train_loader):.4f}")
-        print(f"Val loss: {val_loss:.4f}")
+        print(f"Epoch {epoch+1}: Train Loss: {train_loss/len(train_loader):.4f}, Val Loss: {val_loss:.4f}")
         
-        # Lưu model tốt nhất
+        # Early stopping check
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            epochs_no_improve = 0
             torch.save({
                 "image_caption_model": image_caption_model.state_dict(),
                 "nkdgnn": nkdgnn.state_dict(),
                 "optimizer": optimizer.state_dict(),
             }, args.checkpoint)
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= args.patience:
+                print(f"Early stopping triggered after {epoch+1} epochs.")
+                break
 
 def test(args):
     # Load test dataset
@@ -215,8 +229,8 @@ def test(args):
     results = []
     
     with torch.no_grad():
-        
-        for batch in test_loader:
+        progress_bar = tqdm(test_loader, desc="Testing")  # Added tqdm
+        for batch in progress_bar:
             images = batch["images"].to(args.device)
             texts = batch["texts"]
             captions = batch["captions"]
@@ -235,15 +249,23 @@ def test(args):
             # 3. Tạo đồ thị tri thưc
             for paragraph in texts:
                 G, _, entities = build_knowledge_graph(paragraph, stanza_model)
-                graph_data = from_networkx(G)
-                graph_data.x = torch.eye(G.number_of_nodes(), dtype=torch.float) # One-hot encoding node features
-                graph_list.append(graph_data)
-                entity_list.append(entities) 
+                graph_list.append(G)
+                entity_lists.append(entities) 
             # 4. Xử lý đồ thị tri thức bằng NKDGNN
-            graph_data = [g.to(args.device) for g in graph_list]
-            entity_list = [e.to(args.device) for e in entity_list]
-
-            entity_prob_list, _ = nkdgnn(graph_data, entity_lists)
+            # graph_data = [g.to(args.device) for g in graph_list]
+            # entity_lists = [e.to(args.device) for e in entity_lists]
+            for single_GA, single_EL in zip(graph_list, entity_lists):
+                edge_index = torch.tensor(list(single_GA.edges)).t().contiguous().to(args.device)
+                x = torch.tensor([single_GA.nodes[n]['frequency'] for n in single_GA.nodes]).float().unsqueeze(-1).to(args.device)
+                node_degree = torch.tensor([G.degree[n] for n in single_GA.nodes]).float().to(args.device)
+                ent_prob = nkdgnn(x, edge_index, node_degree)
+                results = []
+                for node, prob in zip(single_GA.nodes(), ent_prob):
+                    entity_info = next((e for e in single_EL if e[0] == node), None)
+                    if entity_info:
+                        results.append((entity_info[0], entity_info[1], prob.item()))
+                
+                entity_prob_list.append(sorted(results, key=lambda x: -x[2]))
             
             # 5. Điền vào template
             filled_captions = []
@@ -276,29 +298,46 @@ def test(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     
-    # Tham số chung
+    # General parameters
     parser.add_argument("--mode", choices=["train", "test"], required=True)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     
-    # Đường dẫn dữ liệu
+    # Data paths
     parser.add_argument("--train_data_path", help="Path to training JSON")
     parser.add_argument("--val_data_path", help="Path to validation JSON")
     parser.add_argument("--test_data_path", help="Path to test JSON")
     parser.add_argument("--output_file", default="results.json")
     
-    # Tham số model
+    # Model parameters
     parser.add_argument("--embed_size", type=int, default=256)
     parser.add_argument("--hidden_size", type=int, default=512)
     
-    # Tham số huấn luyện
+    # Training parameters
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=15)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--checkpoint", default="best_model.pt")
+    parser.add_argument("--patience", type=int, default=5, help="Early stopping patience")  # Added argument
     
     args = parser.parse_args()
     
     if args.mode == "train":
         train(args)
+        if args.test_data_path:
+            print("Training completed. Running test...")
+            test(args)
     else:
         test(args)
+# Example
+# # Train the model with early stopping and automatic testing
+# python main.py --mode train \
+#   --train_data_path train.json \
+#   --val_data_path val.json \
+#   --test_data_path test.json \
+#   --patience 5 \
+#   --checkpoint best_model.pt
+
+# # Test the model separately
+# python main.py --mode test \
+#   --test_data_path test.json \
+#   --checkpoint best_model.pt
