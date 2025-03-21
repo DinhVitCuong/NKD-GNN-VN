@@ -65,3 +65,29 @@ def collate_fn(batch):
         "texts": text,
         "captions": captions
     }
+def load_vocab(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        vocab = json.load(f)
+    print(f"Loaded vocabulary with {len(vocab)} tokens from {filepath}")
+    index_to_word = {idx: token for token, idx in vocab.items()}
+    return vocab, index_to_word
+# Hàm encode: chuyển chuỗi thành danh sách token id
+def encode(text, vocab, max_length=64, pad_token="<pad>", start_token="<start>", end_token="<end>"):
+    tokens = text.split()  # Dùng split đơn giản (bạn có thể thay bằng tokenizer chuyên biệt nếu cần)
+    tokens = [start_token] + tokens + [end_token]
+    token_ids = [vocab.get(token, vocab["<unk>"]) for token in tokens]
+    if len(token_ids) < max_length:
+        token_ids += [vocab[pad_token]] * (max_length - len(token_ids))
+    else:
+        token_ids = token_ids[:max_length]
+    return token_ids
+
+# Hàm decode: chuyển danh sách token id thành chuỗi văn bản
+def decode(token_ids, index_to_word, skip_special_tokens=True, special_tokens=["<unk>", "<start>", "<end>", "<pad>"]):
+    tokens = []
+    for id in token_ids:
+        token = index_to_word.get(int(id), "<unk>")
+        if skip_special_tokens and token in special_tokens:
+            continue
+        tokens.append(token)
+    return " ".join(tokens)
