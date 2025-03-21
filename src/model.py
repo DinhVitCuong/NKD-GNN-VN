@@ -1,86 +1,117 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
-import torch.nn.functional as F
-from torch_geometric.nn import GATConv, global_mean_pool
-from torch_geometric.utils import from_networkx
 
+####################################################
+# 1. ImageEncoder: Trích xuất đặc trưng ảnh
+####################################################
 class ImageEncoder(nn.Module):
-    """
-    Mô hình trích xuất đặc trưng ảnh sử dụng ResNet-50
-    """
-    def __init__(self, embed_size, pretrained=True):
+    def __init__(self, embed_size=256, pretrained=True):
         super(ImageEncoder, self).__init__()
-        
-        # Load ResNet-50 pre-trained
+        # Tải ResNet-50
         self.cnn = models.resnet50(pretrained=pretrained)
-        
-        # Thay thế lớp fully connected cuối cùng
         in_features = self.cnn.fc.in_features
         self.cnn.fc = nn.Sequential(
             nn.Linear(in_features, embed_size),
             nn.ReLU(),
             nn.Dropout(0.5)
         )
-        
+    
     def forward(self, images):
-        features = self.cnn(images)  # (batch_size, embed_size)
-        return features
+        """
+        images: Tensor (batch_size, 3, H, W)
+        return: Tensor (batch_size, embed_size)
+        """
+        return self.cnn(images)
 
+####################################################
+# 2. CaptionDecoder: Dùng Embedding + LSTM
+####################################################
 class CaptionDecoder(nn.Module):
-    def __init__(self, embed_size, hidden_size, start_token, end_token, vocab_size, num_layers=1):
+    def __init__(self, embed_size=256, hidden_size=512,
+                 start_token=1, end_token=2,
+                 vocab_size=5000, num_layers=1):
         super().__init__()
-        self.embed = nn.Embedding(vocab_size, embed_size)  # Embedding layer
+        
+        # Embedding thường (không sigmoid)
+        self.embed = nn.Embedding(vocab_size, embed_size)
+        
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_size, vocab_size)
+        self.fc   = nn.Linear(hidden_size, vocab_size)
+
         self.start_token = start_token
-        self.end_token = end_token
+        self.end_token   = end_token
         
-    def forward(self, features, captions=None):
+    def forward(self, features, captions=None, max_len=20):
+        """
+        features: (batch_size, embed_size) từ ImageEncoder
+        captions: (batch_size, seq_len) nếu training
+        max_len:  độ dài tối đa khi inference
+        """
         batch_size = features.size(0)
-        h = features.unsqueeze(0)  # (num_layers, batch_size, hidden_size)
+
+        # Khởi tạo hidden state (h) từ features
+        # (num_layers=1, batch_size, hidden_size)
+        h = features.unsqueeze(0)
         c = torch.zeros_like(h)
-        
-        # Training Mode: Sử dụng teacher forcing
+
+        # ============= TRAINING MODE =============
         if captions is not None:
+            # 1) Lấy embedding của captions
             embeddings = self.embed(captions)  # (batch_size, seq_len, embed_size)
+            # 2) LSTM
             lstm_out, _ = self.lstm(embeddings, (h, c))  # (batch_size, seq_len, hidden_size)
-            outputs = self.fc(lstm_out)  # (batch_size, seq_len, vocab_size)
+            # 3) Linear -> vocab_size
+            outputs = self.fc(lstm_out)                  # (batch_size, seq_len, vocab_size)
             return outputs
         
-        # Inference Mode: Tự sinh từng từ
+        # ============= INFERENCE MODE =============
         else:
             input_words = torch.full((batch_size,), self.start_token, device=features.device)
             outputs = []
-            for _ in range(20):  # Giới hạn độ dài tối đa
-                embeddings = self.embed(input_words).unsqueeze(1)  # (batch_size, 1, embed_size)
-                lstm_out, (h, c) = self.lstm(embeddings, (h, c))
-                preds = self.fc(lstm_out.squeeze(1))  # (batch_size, vocab_size)
+
+            for _ in range(max_len):
+                # Lấy embedding của word hiện tại
+                emb = self.embed(input_words).unsqueeze(1)  # (batch_size, 1, embed_size)
+                
+                # LSTM
+                lstm_out, (h, c) = self.lstm(emb, (h, c))    # (batch_size, 1, hidden_size)
+                preds = self.fc(lstm_out.squeeze(1))         # (batch_size, vocab_size)
+
+                # Chọn từ có xác suất cao nhất
                 next_words = preds.argmax(dim=1)
                 outputs.append(next_words)
                 input_words = next_words
-                next_words = preds.argmax(dim=1)
-                outputs.append(next_words)
-                input_words = next_words
-                # Dừng nếu gặp token <end>
+
+                # Dừng sớm nếu gặp token end_token
                 if (next_words == self.end_token).all():
                     break
-            return torch.stack(outputs, dim=1)  # (batch_size,
 
+            # Kết quả: (batch_size, seq_len_inference)
+            return torch.stack(outputs, dim=1)
+
+####################################################
+# 3. Tổng hợp thành ImageCaptionModel
+####################################################
 class ImageCaptionModel(nn.Module):
-    def __init__(self, embed_size, hidden_size, vocab_size):
+    def __init__(self, embed_size=256, hidden_size=512,
+                 vocab_size=5000, start_token=1, end_token=2):
         super().__init__()
-        self.encoder = ImageEncoder(embed_size)
-        self.decoder = CaptionDecoder(embed_size, hidden_size, vocab_size)  # Truyền vocab_size vào đây
+        self.encoder = ImageEncoder(embed_size=embed_size)
+        self.decoder = CaptionDecoder(embed_size=embed_size,
+                                      hidden_size=hidden_size,
+                                      start_token=start_token,
+                                      end_token=end_token,
+                                      vocab_size=vocab_size)
         
     def forward(self, images, captions=None):
+        """
+        Nếu captions != None => Training mode
+        Nếu captions == None => Inference mode
+        """
         visual_features = self.encoder(images)
-        
-        # Training: Sử dụng captions làm đầu vào
         if captions is not None:
-            outputs = self.decoder(visual_features, captions)
-            return outputs
-        # Inference: Tự sinh caption
+            outputs = self.decoder(visual_features, captions=captions)
         else:
-            outputs = self.decoder(visual_features)
-            return outputs
+            outputs = self.decoder(visual_features, captions=None)
+        return outputs
