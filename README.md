@@ -34,10 +34,8 @@ Our implementation has been fully adapted to support the Vietnamese language. It
 
 - Python 3.8+
 - [PyTorch](https://pytorch.org/)
-- [torchvision](https://pytorch.org/vision/stable/index.html)
-- OpenCV
 - NumPy
-- Vietnamese NLP toolkit
+- stanza
 - Additional packages listed in `requirements.txt`
 
 ---
