@@ -6,6 +6,7 @@ import json
 import argparse
 import os
 from torch_geometric.data import Batch
+Image.MAX_IMAGE_PIXELS = None
 
 class CustomDataset(Dataset):
     def __init__(self, data_path, max_paragraphs=3):
@@ -59,18 +60,28 @@ def collate_fn(batch):
     images = torch.stack([item["image"] for item in batch])
     captions = [item["caption"] for item in batch]
     text = [item["text"] for item in batch]
-    
     return {
         "images": images,
         "texts": text,
         "captions": captions
     }
-def load_vocab(filepath):
+    
+def load_vocab_embedding(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
         vocab = json.load(f)
     print(f"Loaded vocabulary with {len(vocab)} tokens from {filepath}")
-    index_to_word = {idx: token for token, idx in vocab.items()}
+    # Create a mapping from embedding (converted to a tuple) to the word.
+    embedding_to_word = {tuple(embedding): word for word, embedding in vocab.items()}
+    return vocab, embedding_to_word
+    
+def load_vocab_index(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        vocab = json.load(f)
+    print(f"Loaded vocabulary with {len(vocab)} tokens from {filepath}")
+    # Create a mapping from embedding (converted to a tuple) to the word.
+    index_to_word = {index: word for word, index in vocab.items()}
     return vocab, index_to_word
+
 # Hàm encode: chuyển chuỗi thành danh sách token id
 def encode(text, vocab, max_length=64, pad_token="<pad>", start_token="<start>", end_token="<end>"):
     tokens = text.split()  # Dùng split đơn giản (bạn có thể thay bằng tokenizer chuyên biệt nếu cần)

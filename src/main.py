@@ -16,7 +16,7 @@ from model import ImageCaptionModel
 from GNN import NKDGNN
 from knowledge_graph import build_knowledge_graph
 from template_caption import generate_template_caption, fill_template
-from data_loader import CustomDataset, collate_fn, load_vocab, encode, decode
+from data_loader import CustomDataset, collate_fn, load_vocab_index, encode, decode
 
 # Khởi tạo PhoBERT tokenizer và model
 # tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", use_fast=False)
@@ -26,7 +26,7 @@ stanza_model = stanza.Pipeline('vi', processors='tokenize,pos,ner')
 
 def evaluate(models, dataloader, criterion, device):
     # Load vocab/index-to-word:
-    vocab, index_to_word = load_vocab(args.vocab_path)
+    vocab, embedding_to_word = load_vocab_index(args.vocab_path)
     image_caption_model, nkdgnn = models
     image_caption_model.eval()
     nkdgnn.eval()
@@ -42,7 +42,8 @@ def evaluate(models, dataloader, criterion, device):
             
             # 1. Generate initial captions
             generated_ids = image_caption_model(images)
-            generated_captions = [decode(seq, index_to_word, skip_special_tokens=True) for seq in generated_ids]
+            generated_ids = torch.argmax(generated_ids, dim=-1).squeeze(0).tolist()
+            generated_captions = [decode(seq, embedding_to_word, skip_special_tokens=True) for seq in generated_ids]
             
             # 2. Mask captions
             template_captions = [generate_template_caption(c, stanza_model) for c in generated_captions]
@@ -78,7 +79,7 @@ def evaluate(models, dataloader, criterion, device):
             output_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in filled_captions]).to(args.device)
             caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
             
-            loss = criterion(output_ids.view(-1, len(vocab)), caption_ids.view(-1))
+            loss = criterion(output_ids.view(-1), caption_ids.view(-1))
             total_loss += loss.item()
             progress_bar.set_postfix({'val_loss': loss.item()})  # Update progress bar
     
@@ -86,7 +87,7 @@ def evaluate(models, dataloader, criterion, device):
 
 def train(args):
     # Load vocab/index-to-word:
-    vocab, index_to_word = load_vocab(args.vocab_path)
+    vocab, embedding_to_word = load_vocab_index(args.vocab_path)
     # Load datasets
     train_dataset = CustomDataset(args.train_data_path)
     val_dataset = CustomDataset(args.val_data_path)
@@ -130,8 +131,10 @@ def train(args):
             entity_prob_list = []
 
             # 1. Sinh caption ban đầu
-            generated_ids = image_caption_model(images, captions)
-            generated_captions = [decode(seq, index_to_word, skip_special_tokens=True) for seq in generated_ids]
+            caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
+            generated_ids = image_caption_model(images, caption_ids)
+            generated_ids = torch.argmax(generated_ids, dim=-1).squeeze(0).tolist()
+            generated_captions = [decode(seq, embedding_to_word, skip_special_tokens=True) for seq in generated_ids]
             
             # 2. Đục lỗ caption
             template_captions = [generate_template_caption(c, stanza_model) for c in generated_captions]
@@ -145,9 +148,15 @@ def train(args):
             # graph_data = [g.to(args.device) for g in graph_list]
             # entity_lists = [e.to(args.device) for e in entity_lists]
             for single_GA, single_EL in zip(graph_list, entity_lists):
-                edge_index = torch.tensor(list(single_GA.edges)).t().contiguous().to(args.device)
+                # print(f"GRAPH EDGES: \n {single_GA.edges}")
+                # print(f"GRAPH NODES: \n {single_GA.nodes}")
+                # print(f"ENTITY LIST: \n{single_EL}")
+                node_mapping = {node: idx for idx, node in enumerate(single_GA.nodes())}
+                mapped_edges = [[node_mapping[u], node_mapping[v]] for u, v in single_GA.edges()]
+                edge_index = torch.tensor(mapped_edges, dtype=torch.long).t().contiguous().to(args.device)
+                # edge_index = torch.tensor(list(single_GA.edges)).t().contiguous().to(args.device)
                 x = torch.tensor([single_GA.nodes[n]['frequency'] for n in single_GA.nodes]).float().unsqueeze(-1).to(args.device)
-                node_degree = torch.tensor([G.degree[n] for n in single_GA.nodes]).float().to(args.device)
+                node_degree = torch.tensor([single_GA.degree[n] for n in single_GA.nodes]).float().to(args.device)
                 ent_prob = nkdgnn(x, edge_index, node_degree)
                 results = []
                 for node, prob in zip(single_GA.nodes(), ent_prob):
@@ -167,7 +176,7 @@ def train(args):
             caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
             
             # 7. Tính loss và cập nhật trọng số
-            loss = criterion(output_ids.view(-1, len(vocab)), caption_ids.view(-1))
+            loss = criterion(output_ids.view(-1), caption_ids.view(-1))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -201,7 +210,7 @@ def train(args):
 
 def test(args):
     # Load vocab/index-to-word:
-    vocab, index_to_word = load_vocab(args.vocab_path)
+    vocab, embedding_to_word = load_vocab_index(args.vocab_path)
     # Load test dataset
     test_dataset = CustomDataset(args.test_data_path)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)
@@ -241,7 +250,8 @@ def test(args):
 
             # 1. Sinh caption ban đầu
             generated_ids = image_caption_model(images)
-            generated_captions = [decode(seq, index_to_word, skip_special_tokens=True) for seq in generated_ids]
+            generated_ids = torch.argmax(generated_ids, dim=-1).squeeze(0).tolist()
+            generated_captions = [decode(seq, embedding_to_word, skip_special_tokens=True) for seq in generated_ids]
             
             # 2. Đục lỗ caption
             template_captions = [generate_template_caption(c, stanza_model) for c in generated_captions]
@@ -272,9 +282,9 @@ def test(args):
             for template, entities in zip(template_captions, entity_prob_list):
                 filled_captions.append(fill_template(template, entities))
             
-            # 6. Tokenize captions
-            output_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in filled_captions]).to(args.device)
-            caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
+            # # 6. Tokenize captions
+            # output_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in filled_captions]).to(args.device)
+            # caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
             
             # # 7. Tính loss và update trọng số
             # loss = criterion(output_ids.view(-1, tokenizer.vocab_size), caption_ids.view(-1))
@@ -300,10 +310,10 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     
     # Data paths
-    parser.add_argument("--train_data_path", help="Path to training JSON")
-    parser.add_argument("--val_data_path", help="Path to validation JSON")
-    parser.add_argument("--test_data_path", help="Path to test JSON")
-    parser.add_argument("--output_file", default="results.json")
+    parser.add_argument("--train_data_path", help="Path to training JSON", required=True)
+    parser.add_argument("--val_data_path", help="Path to validation JSON", required=True)
+    parser.add_argument("--test_data_path", help="Path to test JSON", required=True)
+    parser.add_argument("--output_file", default="results.json", required=True)
     
     # Model parameters
     parser.add_argument("--vocab_path", type=str, required=True)

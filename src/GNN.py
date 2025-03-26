@@ -29,8 +29,15 @@ class NKDGNN(nn.Module):
         # Message passing with GRU-like gates
         for layer in range(self.num_layers):
             # Aggregate neighbor messages (Eq.2)
-            row, col = edge_index
-            msg = scatter(h[col], row, dim=0, reduce='mean')  # Mean aggregation
+            # Check if edge_index is empty
+            if edge_index is None or edge_index.numel() == 0:
+                # Define a default aggregation (e.g., zeros or using x directly)
+                msg = torch.zeros_like(h)
+            else:
+                row, col = edge_index
+                msg = scatter(h[col], row, dim=0, reduce='mean')  # Mean aggregation
+                
+            msg = scatter(h[col], row, dim=0, reduce='mean', dim_size=h.size(0))  # Mean aggregation
             
             # Gate computations (Eq.3-6)
             combined = torch.cat([x, msg], dim=-1)

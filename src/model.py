@@ -33,15 +33,15 @@ class CaptionDecoder(nn.Module):
                  vocab_size=5000, num_layers=1):
         super().__init__()
         
-        # Embedding thường (không sigmoid)
         self.embed = nn.Embedding(vocab_size, embed_size)
-        
+        self.proj = nn.Linear(embed_size, hidden_size)  # Projection layer added
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
         self.fc   = nn.Linear(hidden_size, vocab_size)
 
         self.start_token = start_token
         self.end_token   = end_token
-        
+
+
     def forward(self, features, captions=None, max_len=20):
         """
         features: (batch_size, embed_size) từ ImageEncoder
@@ -50,10 +50,10 @@ class CaptionDecoder(nn.Module):
         """
         batch_size = features.size(0)
 
-        # Khởi tạo hidden state (h) từ features
-        # (num_layers=1, batch_size, hidden_size)
-        h = features.unsqueeze(0)
-        c = torch.zeros_like(h)
+        # Project features to hidden_size dimension
+        h = self.proj(features)  # (batch_size, hidden_size)
+        h = h.unsqueeze(0)       # (1, batch_size, hidden_size)
+        c = torch.zeros_like(h)  # (1, batch_size, hidden_size)
 
         # ============= TRAINING MODE =============
         if captions is not None:
