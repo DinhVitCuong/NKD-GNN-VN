@@ -75,11 +75,15 @@ def evaluate(models, dataloader, criterion, device):
             for template, entities in zip(template_captions, entity_prob_list):
                 filled_captions.append(fill_template(template, entities))
             
-            # 6. Compute loss
-            output_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in filled_captions]).to(args.device)
-            caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
-            
-            loss = criterion(output_ids.view(-1), caption_ids.view(-1))
+            # 6. Compute loss using model logits
+            caption_ids = torch.tensor([
+                encode(caption, vocab, max_length=64) for caption in captions
+            ]).to(args.device)
+            logits = image_caption_model(images, caption_ids)
+            loss = criterion(
+                logits.view(-1, logits.size(-1)),
+                caption_ids.view(-1)
+            )
             total_loss += loss.item()
             progress_bar.set_postfix({'val_loss': loss.item()})  # Update progress bar
     
@@ -171,17 +175,22 @@ def train(args):
             for template, entities in zip(template_captions, entity_prob_list):
                 filled_captions.append(fill_template(template, entities))
             
-            # 6. Tokenize captions
-            output_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in filled_captions]).to(args.device)
-            caption_ids = torch.tensor([encode(caption, vocab, max_length=64) for caption in captions]).to(args.device)
-            
+            # 6. Tokenize ground truth captions
+            caption_ids = torch.tensor([
+                encode(caption, vocab, max_length=64) for caption in captions
+            ]).to(args.device)
+
             # 7. Tính loss và cập nhật trọng số
-            loss = criterion(output_ids.view(-1), caption_ids.view(-1))
+            logits = image_caption_model(images, caption_ids)
+            loss = criterion(
+                logits.view(-1, logits.size(-1)),
+                caption_ids.view(-1)
+            )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
-            total_loss += loss.item()
+
+            train_loss += loss.item()
         
         # Validation
         val_loss = evaluate(
